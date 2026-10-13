@@ -1,0 +1,213 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "OpenAI Configuration Schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "model"
+  ],
+  "definitions": {
+    "paramSchema": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "string",
+            "number",
+            "integer",
+            "boolean",
+            "object",
+            "array"
+          ]
+        },
+        "description": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/paramSchema"
+          }
+        },
+        "items": {
+          "$ref": "#/definitions/paramSchema"
+        },
+        "required": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "toolParameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "properties"
+      ],
+      "properties": {
+        "type": {
+          "const": "object"
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/paramSchema"
+          }
+        },
+        "required": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "properties": {
+    "model": {
+      "type": "string",
+      "description": "ID of the model that will generate the response (e.g., gpt-4.1, gpt-4o, gpt-5)."
+    },
+    "max_output_tokens": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Hard cap on tokens in the model’s reply."
+    },
+    "temperature": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 2,
+      "default": 0.8,
+      "description": "Sampling temperature; higher values increase randomness."
+    },
+    "reasoning": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Controls model reasoning effort.",
+      "properties": {
+        "effort": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "summary": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "required",
+            "none"
+          ]
+        }
+      }
+    },
+    "text": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Controls structured output formatting.",
+      "properties": {
+        "format": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "json_schema",
+                "json_object",
+                "text"
+              ]
+            },
+            "name": {
+              "type": "string"
+            },
+            "schema": {
+              "type": "object"
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "type": "array",
+      "description": "Optional tool declarations compatible with OpenAI Responses API.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "function",
+              "code_interpreter",
+              "web_search",
+              "web_search_preview"
+            ]
+          },
+          "parameters": {
+            "$ref": "#/definitions/toolParameters"
+          },
+          "user_location": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Optional approximate user location for localized search.",
+            "properties": {
+              "type": {
+                "const": "approximate"
+              },
+              "city": {
+                "type": "string"
+              },
+              "region": {
+                "type": "string"
+              },
+              "country": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "search_context_size": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ],
+            "description": "Amount of web context retrieved."
+          },
+          "filters": {
+            "type": "object",
+            "description": "Optional filtering configuration.",
+            "properties": {
+              "allowed_domains": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

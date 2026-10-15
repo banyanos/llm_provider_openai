@@ -15,7 +15,12 @@ from typing import Any, Dict, List, Optional
 
 import openai
 import pendulum
-from llm_provider_base import LlmProviderHandler
+from llm_provider_base import (
+    LlmProviderHandler,
+    bearer,
+    endpoint_base,
+    fetch_upstream_models,
+)
 from silvaengine_utility import Debugger, Serializer
 from silvaengine_utility.performance_monitor import performance_monitor
 
@@ -59,6 +64,14 @@ class OpenAIResponsesProvider(LlmProviderHandler):
         "list_models": True,
     }
     default_pool_name = "httpx_llm_openai"
+
+    @classmethod
+    def list_models(cls, ctx: Any) -> List[Dict[str, str]]:
+        """OpenAI model list: ``GET {endpoint}/models``."""
+        return fetch_upstream_models(
+            ctx, f"{endpoint_base(ctx, 'https://api.openai.com/v1')}/models",
+            headers=bearer(ctx),
+        )
 
     def __init__(
         self,

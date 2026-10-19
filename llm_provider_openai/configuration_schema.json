@@ -105,8 +105,8 @@
           "type": "string",
           "enum": [
             "auto",
-            "required",
-            "none"
+            "concise",
+            "detailed"
           ]
         }
       }

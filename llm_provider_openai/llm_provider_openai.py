@@ -69,7 +69,8 @@ class OpenAIResponsesProvider(LlmProviderHandler):
     def list_models(cls, ctx: Any) -> List[Dict[str, str]]:
         """OpenAI model list: ``GET {endpoint}/models``."""
         return fetch_upstream_models(
-            ctx, f"{endpoint_base(ctx, 'https://api.openai.com/v1')}/models",
+            ctx,
+            f"{endpoint_base(ctx, 'https://api.openai.com/v1')}/models",
             headers=bearer(ctx),
         )
 
@@ -103,15 +104,17 @@ class OpenAIResponsesProvider(LlmProviderHandler):
                 )
             self.http_client = http_client
 
-            openai_api_key = (self.credentials.get("openai_api_key")
-                              or self.credentials.get("api_key") or "").strip() or None
+            openai_api_key = (
+                self.credentials.get("openai_api_key")
+                or self.credentials.get("api_key")
+                or ""
+            ).strip() or None
             self.client = openai.OpenAI(
                 api_key=openai_api_key,
+                base_url=self.agent.get("configuration", {}).get("base_url") or None,
                 http_client=http_client,
                 max_retries=0,
             )
-            if self.agent.get("configuration", {}).get("base_url"):
-                self.client.base_url = self.agent["configuration"]["base_url"]
 
             if "enabled_tools" in self.agent["configuration"]:
                 # Filter tools using set-based membership for O(1) lookups.
@@ -298,6 +301,46 @@ class OpenAIResponsesProvider(LlmProviderHandler):
                 invoke_start = pendulum.now("UTC")
 
             variables = dict(self.model_setting, **kwargs)
+            # llm_engine's adapter supplies the Chat-Completions-era
+            # ``max_tokens`` (from the model record column); the Responses
+            # API takes ``max_output_tokens`` — map the name (an
+            # explicit model-config ``max_output_tokens`` wins).
+            if "max_tokens" in variables:
+                if "max_output_tokens" not in variables:
+                    variables["max_output_tokens"] = variables.pop("max_tokens")
+                else:
+                    del variables["max_tokens"]
+            # Reasoning models reject non-default sampling ("Unsupported
+            # parameter: 'temperature' is not supported with this model")
+            # — drop it while the reasoning option is configured
+            # (same constraint class as Anthropic thinking/temperature).
+            if variables.get("reasoning"):
+                variables.pop("temperature", None)
+            # The adapter hands tools over in the neutral
+            # Chat-Completions shape (name nested under "function"); the
+            # Responses API takes the flat function tool shape
+            # ("tools[0].name") — convert neutral entries, pass
+            # provider-shaped entries through untouched.
+            tools = variables.get("tools")
+            if isinstance(tools, list) and tools:
+                converted_tools = []
+                for tool in tools:
+                    if isinstance(tool, dict) and isinstance(
+                        tool.get("function"), dict
+                    ):
+                        function = tool["function"]
+                        converted_tools.append(
+                            {
+                                "type": "function",
+                                "name": function.get("name") or tool.get("name") or "",
+                                "description": function.get("description") or "",
+                                "parameters": function.get("parameters")
+                                or {"type": "object", "properties": {}},
+                            }
+                        )
+                    else:
+                        converted_tools.append(tool)
+                variables["tools"] = converted_tools
 
             result = self.client.responses.create(**variables)
 
@@ -685,6 +728,7 @@ class OpenAIResponsesProvider(LlmProviderHandler):
                 {"role": role or "user", "content": message.get("content") or ""}
             )
         return native
+
     def _provider_state(
         self,
         reasoning_item: Optional[Dict[str, Any]],
@@ -719,9 +763,7 @@ class OpenAIResponsesProvider(LlmProviderHandler):
         usage: Dict[str, Any] = {
             "prompt_tokens": prompt,
             "completion_tokens": completion,
-            "total_tokens": _int(
-                getattr(raw, "total_tokens", prompt + completion)
-            ),
+            "total_tokens": _int(getattr(raw, "total_tokens", prompt + completion)),
         }
         input_details = getattr(raw, "input_tokens_details", None)
         cached = _int(getattr(input_details, "cached_tokens", 0))
@@ -1190,9 +1232,7 @@ class OpenAIResponsesProvider(LlmProviderHandler):
                                 function_items.append(reasoning_item)
                             reasoning_item = None
 
-                            function_items.append(
-                                output.model_dump(exclude_none=True)
-                            )
+                            function_items.append(output.model_dump(exclude_none=True))
                             neutral_tool_calls.append(
                                 {
                                     "id": getattr(output, "call_id", "")
@@ -1201,9 +1241,7 @@ class OpenAIResponsesProvider(LlmProviderHandler):
                                     "type": "function",
                                     "function": {
                                         "name": getattr(output, "name", "") or "",
-                                        "arguments": getattr(
-                                            output, "arguments", ""
-                                        )
+                                        "arguments": getattr(output, "arguments", "")
                                         or "{}",
                                     },
                                 }
